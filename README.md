@@ -2,6 +2,7 @@
 
 ## 效果展示
 <img width="189" height="386" alt="9d95329faa4b06f41477f41857922686" src="https://github.com/user-attachments/assets/d1dad45d-d206-46b6-9e4b-cb03b2a2f20d" />
+<img width="685" height="324" alt="7e6a01706bfeac8fa5aa4db5ab5c99f1" src="https://github.com/user-attachments/assets/508d24ac-f4d6-4f55-b441-276ceaa00023" />
 
 ## 项目简介
 基于 CycleGAN 实现非配对图像风格迁移，将真实风景照转换为动漫风格。
