@@ -1,4 +1,3 @@
-<img width="189" height="386" alt="9d95329faa4b06f41477f41857922686" src="https://github.com/user-attachments/assets/b27aaf92-94cc-4784-974f-fe422d1e6c9b" /># liqi
 # CycleGAN 真实照片转动漫风格
 
 ## 效果展示
