@@ -1,0 +1,123 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
+
+df = pd.read_csv(r'C:\Users\hhhhhhm\Desktop\Book(Sheet1).csv')
+df_clean = df.copy()
+df_clean = df_clean.dropna(subset=['通话状态','线索标签'],how='all')
+df_clean ['线索创建时间'] = pd.to_datetime(df_clean['线索创建时间'])
+
+tag_split = df_clean['线索标签'].str.split(',',expand=True)
+df_clean['标签_状态'] = tag_split[0]
+df_clean['标签_等级'] = tag_split[1] if tag_split.shape[1] > 1 else np.nan
+
+stage_map = {
+    '未接通':'1-未接通',
+    '待联系':'2-待联系',
+    '已接通':'3-已接通',
+    '有效沟通':'4-有效沟通',
+    '深度沟通':'5-深度沟通'}
+df_clean['漏斗阶段'] = df_clean['通话状态'].map(stage_map)
+df_clean['城市'] = df_clean['所在城市'].str.replace('云南-','',regex = False)
+
+print('清洗后形状',df_clean.shape)
+print(df_clean['漏斗阶段'].value_counts().sort_index())
+print(df_clean['标签_等级'].value_counts())
+print(df_clean['城市'].value_counts().head())
+
+funnel = df_clean['漏斗阶段'].value_counts().sort_index()
+total = funnel.sum()
+print('----线索转化率----')
+
+#bar  线索到有效沟通的转化率
+for stage,count in funnel.items():
+    pct = count / total *100
+    print(f'{stage}:{count}条({pct:.1f}%)')
+
+fig,ax = plt.subplots(figsize=(10,5))
+bars = ax.bar(funnel.index,funnel.values,color = ['#d9d9d9', '#a6cee3', '#1f78b4', '#33a02c', '#fb9a99'])
+for bar,(stage,count) in zip(bars,funnel.items()):
+    ax.text(bar.get_x()+bar.get_width()/2,bar.get_height()+1,f'{count}\n({count/total*100:.1f}%)',ha='center',fontsize=11)
+ax.set_title('整体线索转化漏斗',fontsize = 14)
+ax.set_ylabel('线索数量')
+ax.set_ylim(0,max(funnel.values) * 1.25)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.tight_layout()
+plt.show()
+
+#bar2  客户质量等级分布
+quality_labels = ['A类','B类','C类','D类']
+df_quality = df_clean[df_clean['标签_等级'].isin(quality_labels)].copy()
+quality_dist = df_quality['标签_等级'].value_counts().reindex(['A类','B类','C类','D类'])
+print('----客户质量分类----')
+print(quality_dist)
+
+fig,ax = plt.subplots(figsize=(10,5))
+colors=['#e41a1c', '#ff7f00', '#377eb8', '#999999']
+ax.bar(quality_dist.index,quality_dist.values,color=colors)
+for i,v in enumerate(quality_dist.values):
+    ax.text(i,v+0.5,str(v),ha='center',fontsize = 12)
+ax.set_title('客户质量等级分布',fontsize = 14)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.tight_layout()
+plt.show()
+
+#bar3  所属人做标签，分析漏斗阶段数
+df_valid = df_clean[df_clean['漏斗阶段'].isin(['3-已接通','4-有效沟通','5-深度沟通'])].copy()
+sales_total = df_clean.groupby('所属人').agg(
+    分配线索数=('线索ID','count'),
+    待联系数 = ('漏斗阶段',lambda x:(x=='2-待联系').sum()),
+    已沟通数 = ('漏斗阶段',lambda x:(x.isin(['3-已接通', '4-有效沟通', '5-深度沟通'])).sum()),
+    深度沟通数 = ('漏斗阶段',lambda x:(x=='5-深度沟通').sum() )
+    ).sort_values('分配线索数',ascending = False)
+
+sales_total['触达率'] = ((sales_total['已沟通数']/sales_total['分配线索数'])*100).round(1)
+
+print('---销售效率---')
+print(sales_total)
+
+fig,ax = plt.subplots(figsize = (10,5))
+x = range(len(sales_total))
+width = 0.35
+ax.bar(x,sales_total['分配线索数'],width,label = '分配线索数',color = '#a6cee3')
+ax.bar([i + width for i in x],sales_total['已沟通数'],width,label='有效沟通数',color='#33a02c')
+ax.set_xticks([i+width/2 for i in x])
+ax.set_xticklabels(sales_total.index)
+ax.legend()
+ax.set_title('各销售分配线索',fontsize=14)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.tight_layout()
+plt.show()
+
+#barh4   单元线索量与有效沟通对比
+unit_analysis = df_clean.groupby('单元名称').agg(
+    总线索 = ('线索ID','count'),
+    有效沟通数 = ('漏斗阶段',lambda x : (x.isin(['4-有效沟通','5-深度沟通'])).sum()),
+    C类以上 = ('标签_等级',lambda x:(x.isin(['A类','B类','C类'])).sum())
+    ).sort_values('总线索',ascending = False)
+
+unit_analysis['有效沟通率'] = (unit_analysis['有效沟通数']/unit_analysis['总线索']*100).round(1)
+unit_analysis['C类以上率'] = (unit_analysis['C类以上']/unit_analysis['总线索']*100.0).round(1)
+
+top8 = unit_analysis.head(8)
+fig,ax=plt.subplots(figsize=(10,5))
+ax.barh(range(len(top8)),top8['总线索'],color = '#a6cee3',label = '总线索数')
+ax.barh(range(len(top8)),top8['有效沟通数'],color = '#33a02c',label = '有效数')
+ax.set_yticks(range(len(top8)))
+ax.set_yticklabels([name[:30] for name in top8.index])
+ax.set_xlabel('线索数量')
+ax.set_title('各广告单元线索量与有效沟通对比',fontsize = 14)
+ax.legend()
+ax.invert_yaxis()
+plt.tight_layout()
+plt.show()
+
+    
+    
+       
