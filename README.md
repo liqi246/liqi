@@ -70,7 +70,8 @@
 
 
 # 2. 生成演示数据（不包含任何真实客户信息）
-python generate_demo_data.py
 
-# 3. 运行分析
-jupyter notebook analysis.ipynb
+<img width="999" height="582" alt="image" src="https://github.com/user-attachments/assets/9d5e9cc0-1bc4-474c-8401-5b05b89adea4" />
+<img width="1008" height="581" alt="image" src="https://github.com/user-attachments/assets/e2f6c0e0-856b-4a91-9cb4-0fa73abb0101" />
+
+
