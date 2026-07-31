@@ -1,0 +1,150 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
+
+df = pd.read_csv(r'C:\Users\hhhhhhm\Desktop\Book 2(Sheet1).csv')
+df_clean = df.copy()
+df_clean['线索创建时间'] = pd.to_datetime(df_clean['线索创建时间'])
+high_intent_labels = ['重咨','老客','有效留联']
+def is_high_intent(label):
+    if pd.isna(label):
+        return 0
+    return 1 if any(word in str(label) for word in high_intent_labels) else 0
+df_clean['是否高意向'] = df_clean['线索标签'].apply(is_high_intent)
+df_clean['是否有券'] = df_clean['是否有买单补贴券'].apply(lambda x:1 if x=='有券' else 0)
+df_clean['城市'] = df_clean['所在城市'].str.replace('云南-','',regex = False)
+print('流量类型分布:')
+print(df_clean['流量类型'].value_counts())
+print('\n互动场景分布:')
+print(df_clean['互动场景'].value_counts())
+
+# ============================================================
+# 分析1：自然流量 vs 营销流量 的线索质量对比
+# ============================================================
+
+traffic_analysis = df_clean.groupby('流量类型').agg(
+    线索总数=('线索ID', 'count'),
+    高意向线索数=('是否高意向', 'sum'),
+    有券线索数=('是否有券', 'sum')
+).sort_values('线索总数', ascending=False)
+
+traffic_analysis['高意向率'] = (traffic_analysis['高意向线索数'] / traffic_analysis['线索总数'] * 100).round(1)
+traffic_analysis['券使用率'] = (traffic_analysis['有券线索数'] / traffic_analysis['线索总数'] * 100).round(1)
+
+print("====== 流量类型效果对比 ======")
+print(traffic_analysis)
+
+# 可视化
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# 左图：线索量对比
+traffic_analysis['线索总数'].plot.pie(autopct='%1.1f%%', ax=axes[0], colors=['#ff7f0e', '#1f77b4'])
+axes[0].set_title('自然流量 vs 营销流量 - 线索量占比')
+axes[0].set_ylabel('')
+
+# 右图：高意向率对比
+traffic_analysis['高意向率'].plot.bar(ax=axes[1], color=['#ff7f0e', '#1f77b4'])
+axes[1].set_title('高意向线索占比对比')
+axes[1].set_ylabel('高意向率 (%)')
+axes[1].set_xticklabels(traffic_analysis.index, rotation=0)
+for i, v in enumerate(traffic_analysis['高意向率']):
+    axes[1].text(i, v + 1, f'{v}%', ha='center')
+
+plt.tight_layout()
+plt.show()
+
+
+scene_analysis = df_clean.groupby('互动场景').agg(
+    线索总数=('线索ID','count'),
+    高意向线索数 = ('是否高意向','sum'),
+    有券线索数 = ('是否有券','sum')
+).sort_values('线索总数',ascending = False)
+
+scene_analysis['高意向率'] = (scene_analysis['高意向线索数']/scene_analysis['线索总数']*100).round(1)
+print('互动场景对比')
+print(scene_analysis)
+
+total = [i for i in scene_analysis['线索总数']]
+l = [i for i in scene_analysis['高意向率']]
+top = [max(total[i],l[i]) for i in range(len(scene_analysis))]
+
+fig,ax = plt.subplots(figsize =(10,6))
+x = range(len(scene_analysis))
+width =0.35
+
+bars1 = ax.bar(x,scene_analysis['线索总数'],width,label = '总线索数',color ='#a6cee3')
+bars2 = ax.bar([i + width for i in x],scene_analysis['高意向率'],width,label='高意向率',color='#33a02c')
+
+ax.set_xticks([i + width/2 for i in x])
+ax.set_xticklabels([s[:15] for s in scene_analysis.index])
+
+ax.set_title('互动场景意向率比')
+ax.legend()
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
+for i,(idx,row) in enumerate(scene_analysis.iterrows()):
+    ax.text(i + width,top[i],f'高意向率\n{row['高意向率']}%',ha = 'center',fontsize = 9)
+plt.tight_layout()
+plt.show()
+
+#有券无券
+counter = df_clean.groupby('是否有买单补贴券').agg(
+    线索总数=('线索ID','count'),
+    高意向线索数=('是否高意向','sum')
+)
+counter['高意向率'] = (counter['高意向线索数']/counter['线索总数'] *100).round(1)
+counter.index = ['有券','无券']
+
+print('---团购券---')
+print(counter)
+
+if '买单补贴券信息' in df_clean.columns:
+    coupon_detail = df_clean[df_clean['是否有券']==1]['买单补贴券信息'].value_counts()
+    print(coupon_detail)
+
+
+#关键词热度
+search_data = df_clean[(df_clean['搜索关键词'].notna()) & (df_clean['搜索关键词'] !='') & (df_clean['搜索关键词'] != '数据待产出')]
+if len (search_data['搜索关键词'])>0:
+    target = ['眼袋','双眼皮','乳房','隆鼻']
+    mask = search_data['搜索关键词'].str.contains('|'.join(target),na = False)
+    filter1 = search_data[mask]
+    keyword = filter1['搜索关键词'].value_counts()
+    print(keyword)
+    
+    fig,ax = plt.subplots(figsize = (10,5))
+    keyword.sort_values().plot.barh(ax = ax,color='#fb9a99')
+    ax.set_title('搜索关键词信息')
+    ax.set_xlabel('搜索次数')
+    plt.tight_layout()
+    plt.show()
+else:
+    print('无相关关键词')
+
+
+#线索创建时段分布
+df_clean['小时'] = df_clean['线索创建时间'].dt.hour
+hourly = df_clean.groupby('小时').agg(
+    线索数=('线索ID','count'),
+    高意向数 = ('是否高意向','sum'))
+hourly['高意向率'] = (hourly['高意向数'] / hourly['线索数'] * 100).round(1)
+print(hourly)
+fig,ax1 = plt.subplots(figsize=(10,5))
+width = 0.35
+ax1.bar(hourly.index,hourly['线索数'],width,color = '#a6cee3',label = '总线索数')
+ax1.set_label('小时')
+ax1.set_ylabel('线索数',color='#a6cee3')
+ax1.tick_params(axis = 'y',labelcolor = '#a6cee3')
+
+ax2 = ax1.twinx()
+ax2.plot(hourly.index,hourly['高意向率'],'o-',width,color = '#e31a1c',linewidth=2,label = '高意向率')
+ax2.set_ylabel('高意向率%',color='#e31a1c')
+ax2.tick_params(axis = 'y',labelcolor = '#e31a1c')
+plt.title('高意向率和各时段线索量')
+plt.tight_layout()
+plt.show()
