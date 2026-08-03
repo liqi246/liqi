@@ -1,3 +1,35 @@
+#通过漏斗阶段分析当前线索数占总线索数的占比，及累计占比
+with funner as (
+	select 
+		case 
+			when 通话状态 = '未接通' then '1-未接通'
+			when 通话状态 = '待联系'   THEN '2-待联系'
+            WHEN 通话状态 = '已接通'   THEN '3-已接通'
+            WHEN 通话状态 = '有效沟通' THEN '4-有效沟通'
+            WHEN 通话状态 = '深度沟通' THEN '5-深度沟通'
+            ELSE '其他'
+        END AS 漏斗阶段,
+		couNT(*) AS 线索数
+    FROM public.liqi
+    WHERE 通话状态 IS NOT NULL
+    GROUP BY 漏斗阶段
+)
+SELECT
+    漏斗阶段,
+    线索数,
+    ROUND(线索数 * 100.0 / SUM(线索数) OVER(), 1) AS 占比_pct,
+    ROUND(SUM(线索数) OVER(ORDER BY 漏斗阶段) * 100.0 / SUM(线索数) OVER(), 1) AS 累计占比_pct
+FROM funner
+ORDER BY 漏斗阶段
+
+with asd as (select 所属人,count(*) as 总线索,sum(case when 通话状态 = '已接通' or 通话状态 = '有效沟通' or 通话状态 = '深度沟通' then 1 else 0 end) as 沟通的
+		 from public.liqi
+		 where 所属人 is not null
+		 group by 所属人)
+
+select round(沟通的 * 100.0/总线索 , 2) as 触达率 from asd
+
+
 
 #对当前日期做聚合，得到三日均线，日环比等信息
 with ddd as (select 线索创建时间::Date as time,count(*) as 当日线索数 from public.liqi
@@ -9,4 +41,69 @@ LAG(当日线索数,1) over (order by time)  as 昨日线索,round((当日线索
 					lag(当日线索数,1) over (order by time),2) as 日环比 from ddd
 
 	order by time
-	
+
+
+#小组内每个对接人的高质量率
+SELECT
+    所属人,
+    COUNT(*) AS 总线索,
+    SUM(CASE WHEN 线索标签 LIKE '%重咨%' OR 线索标签 LIKE '%老客%' THEN 1 ELSE 0 END) AS 高意向,
+    SUM(CASE WHEN 线索标签 LIKE '%无效%' THEN 1 ELSE 0 END) AS 无效线索,
+    SUM(CASE WHEN 线索标签 LIKE '%新客%' THEN 1 ELSE 0 END) AS 新客,
+    ROUND(
+        SUM(CASE WHEN 线索标签 LIKE '%重咨%' OR 线索标签 LIKE '%老客%' THEN 1 ELSE 0 END)::NUMERIC
+        / COUNT(*), 3
+    ) AS 高意向率
+FROM public.liqi
+WHERE 所属人 IS NOT NULL
+GROUP BY 所属人
+ORDER BY 高意向率 DESC
+
+
+#团购券对于购买率的影响
+SELECT
+    CASE WHEN 是否有买单补贴券 = '有券' THEN '有券' ELSE '无券' END AS 券分组,
+    COUNT(*) AS 线索数,
+    SUM(CASE WHEN 线索标签 LIKE '%重咨%' OR 线索标签 LIKE '%老客%' THEN 1 ELSE 0 END) AS 高意向数,
+    ROUND(
+        SUM(CASE WHEN 线索标签 LIKE '%重咨%' OR 线索标签 LIKE '%老客%' THEN 1 ELSE 0 END)::NUMERIC
+        / COUNT(*), 3
+    ) AS 高意向率
+FROM public.liqi
+WHERE 是否有买单补贴券 IS NOT NULL
+GROUP BY CASE WHEN 是否有买单补贴券 = '有券' THEN '有券' ELSE '无券' END
+ORDER BY 线索数 DESC;
+
+#搜索关键词的次数对于到店影响
+SELECT
+    搜索关键词,
+    COUNT(*) AS 搜索次数,
+    SUM(CASE WHEN 线索标签 LIKE '%重咨%' OR 线索标签 LIKE '%老客%' THEN 1 ELSE 0 END) AS 高意向数
+FROM public.liqi
+WHERE 搜索关键词 IS NOT NULL
+  AND 搜索关键词 != ''
+  AND 搜索关键词 != '数据待产出'
+GROUP BY 搜索关键词
+ORDER BY 搜索次数 DESC
+LIMIT 20
+
+
+#线索量小但质量高的单元
+WITH unit_stats AS (
+    SELECT
+        单元名称,
+        COUNT(*) AS 线索数,
+        SUM(CASE WHEN 线索标签 LIKE '%重咨%' OR 线索标签 LIKE '%老客%' THEN 1 ELSE 0 END) AS 高意向
+    FROM public.liqi
+    WHERE 单元名称 IS NOT NULL
+    GROUP BY 单元名称
+)
+SELECT
+    单元名称,
+    线索数,
+    高意向,
+    ROUND(高意向::NUMERIC / 线索数, 3) AS 高意向率
+FROM unit_stats
+WHERE 线索数 >= 5  -- 过滤掉样本太小的
+ORDER BY 高意向率 DESC
+LIMIT 10
