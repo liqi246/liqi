@@ -1,0 +1,12 @@
+
+#对当前日期做聚合，得到三日均线，日环比等信息
+with ddd as (select 线索创建时间::Date as time,count(*) as 当日线索数 from public.liqi
+		where 线索创建时间 is not null
+		group by 线索创建时间::date
+		order by 线索创建时间::date)
+select time,round(avg(当日线索数) over(order by time rows between 2 preceding  and current row),1) as 三日均线,
+LAG(当日线索数,1) over (order by time)  as 昨日线索,round((当日线索数 -LAG(当日线索数,1)over (order by time))*100.0/
+					lag(当日线索数,1) over (order by time),2) as 日环比 from ddd
+
+	order by time
+	
